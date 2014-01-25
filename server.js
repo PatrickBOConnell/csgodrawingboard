@@ -18,16 +18,55 @@ var express = require('express'),
 	app = express(),
 	server = require('http').createServer(app),
 	io = require('socket.io').listen(server),
-	path = require('path');
+	path = require('path'),
+	winston = require('winston'),
+	passport = require('passport'),
+	util = require('util'),
+	SteamStrategy = require('passport-steam').Strategy;
+	
+var db = require('mongojs').connect('localhost/csgodrawingboard', ['strats', 'logs']);
+require('winston-mongodb').MongoDB;
+
+var options = {
+		db: 'csgodrawingboard',
+		collection: 'logs'
+};
+
+winston.add(winston.transports.MongoDB, options);
+	
+	
+//winston.add(winston.transports.File, {filename: ')
 	
 process.on('uncaughtException', function(err) {
 	console.log('uncaught exception: ' + err);
-})
-	
+});
+
+passport.serializeUser(function(user, done){
+    done(null, user);
+});
+
+passport.deserializeUser(function(obj,done){
+    done(null, obj);
+});
 	
 
+passport.use(new SteamStrategy({
+    returnURL: 'http://localhost:8080/auth/steam/return',//return url here
+	realm: 'http://localhost:8080/',
+    },
+	function(identifier, profile, done) {
+		process.nextTick(function() {
+		    //I guess this is where I put in the query for local user from steam data?
+			console.log('the identifier is: ' + identifier);
+			
+		    profile.itendifier = identifier;
+			return done(null, profile);
+		});
+	}
+));	
 
-var port = process.env.PORT || 80;	
+
+var port = process.env.PORT || 8080;	
 server.listen(port);
 
 /* io.configure(function () { 
@@ -36,10 +75,17 @@ server.listen(port);
 }); */
 
 var rooms = {};
+var indexes_served = 0;
+var rooms_served = 0;
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'jade');
+app.use(express.cookieParser());
 app.use(express.bodyParser());
+app.use(express.methodOverride());
+app.use(express.session({secret: 'this is secret'}));
+app.use(passport.initialize());
+app.use(passport.session());
 app.use(express.static(path.join(__dirname, 'public')));
 
 //POSTS
@@ -64,14 +110,30 @@ app.post('/test', function(req, res) {
 //GETS
 app.get('/', function(req, res) {
 	console.log('sent index');
-	res.sendfile('index.html');
+	indexes_served++;
+	winston.log('info', 'indexes served: %d', indexes_served);
+	res.render('index', {user: req.user});
 });
+app.get('/auth/steam',
+    passport.authenticate('steam', {failureRedirect: '/'}),
+    function(req, res) {
+        res.redirect('/');
+});
+
+app.get('/auth/steam/return',
+    passport.authenticate('steam', {failureRedirect: '/'}),
+    function(req, res) {
+        res.redirect('/');
+});
+
 app.get('/room=:roomId', function(req, res) {
 	var roomId = req.params.roomId;
 	console.log('room id is: ' + roomId);
+	rooms_served++;
+	winston.log('info', 'rooms served: %d', rooms_served);
 	if(rooms[roomId] !== undefined) {
 		var mapurl = getMap(rooms[roomId].map);
-		res.render('editor', {imgurl: mapurl});
+		res.render('editor', {imgurl: mapurl, user:req.user});
 	}
 	else
 		res.send('invalid room!');
@@ -211,6 +273,17 @@ io.on('connection', function(socket) {
 		}
 		catch(err) {
 			console.log('error in disconnect: ' + err);
+		}
+	});
+	socket.on('send stage', function(data){
+		if(data === null || data === undefined) return;
+		try{
+		    socket.get('room', function(err, room){
+				rooms[room.room].stage = data;
+			});
+		}
+		catch(err){
+		    console.log('error in send stage: ' + err);
 		}
 	});
 	socket.on('draw', function(data){

@@ -1,4 +1,4 @@
-!!! 5
+doctype html
 html
 	head
 		title CS strategy page
@@ -11,6 +11,9 @@ html
 		script(src='/js/kineticjs.js')
 		script(src='/js/jquery-ui-1.10.3.custom.js')
 	body
+		if(user)
+				button
+						|Save
 		div#greatertool.nohightlight
 			div#toolbox.nohighlight
 				img#smoke-icon.tool(onclick="handleClick('smoke')", src="imgs/tools/smoke.jpeg")

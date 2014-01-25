@@ -1,3 +1,4 @@
+
 /*
 This file is part of CSGO Drawing Board.
 
@@ -114,6 +115,7 @@ $(document).ready(function(){
 				var xPos = stage.getMousePosition().x - 37.5;
 				var yPos = stage.getMousePosition().y - 37.5;
 				socket.emit('draw', {type: 'smoke', xPos: xPos, yPos: yPos});
+				//SEND BOARD STATE HERE.
 				break;
 			case 'brush':
 				break;
@@ -184,6 +186,7 @@ $(document).ready(function(){
 			linePoints.push(yPos);
 			console.log('linePoints: ' + linePoints);
 			socket.emit('draw', {type: 'brush', points: linePoints, xPos: xPos, yPos: yPos});
+			//SEND BOARD STATE HERE!
 			linePoints = [];
 		}
 	});
@@ -383,6 +386,7 @@ $(document).ready(function(){
 				smoke.on('dblclick', function(){
 					socket.emit('remove elm', data.id);
 					stage.draw();
+					//UPDATE BOARD STATE HERE!
 				});
 				smoke.on('mousedown', function(){
 					if(tool === 'hand'){
@@ -391,6 +395,7 @@ $(document).ready(function(){
 						this.selected = true;
 						updateTimer = window.setInterval(function(){
 							socket.emit('move obj', {id: smoke.getId(), xPos: smoke.getX(), yPos: smoke.getY()});
+							//KEEP THIS THE SAME (DON'T UPDATE BOARD STATE).
 						}, 100);
 					}
 				});
@@ -398,6 +403,7 @@ $(document).ready(function(){
 					console.log('calling mouse up');
 					if(tool === 'hand' && this.selected){
 						socket.emit('relinquish control', this.getId());
+						//UPDATE BOARD STATE HERE!
 						this.selected = false;
 						clearInterval(updateTimer);
 					}
@@ -406,6 +412,8 @@ $(document).ready(function(){
 				shapehash[smoke.getId()] = smoke;
 				displayLayer.add(smoke);
 				stage.draw();
+				var json = stage.toJSON();
+				console.log(json);
 				break;
 			case 'player':
 				var locimgobj = new Image();

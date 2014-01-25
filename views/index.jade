@@ -1,0 +1,62 @@
+doctype html
+html
+  head
+    title CSGO: Strategy Builder
+    link(rel='stylesheet', type='text/css', href='css/csstrat.css')
+    link(rel='stylesheet', type='text/css', href='css/fam-icons.css')
+    script(type='text/javascript', src='js/csstrat.js')
+    link(rel='icon', href='imgs/favicon.ico')
+    style
+      body{background-image:url('imgs/binding_dark.png')}
+    meta(name='description', content='CounterStrike: Global Offensive Strategy Painter')
+    meta(name='keywords', content='CSGO CounterStrike Global Offensive Strat Painter Strategy')
+    meta(name='author', content='evilduky666 * g0ddish')
+    meta(charset='UTF-8')
+    style(type='text/css')
+      |#mainTitle{
+      |  font-size:25px;
+      |  text-align: center;
+      |}
+      |#mainContent {
+      |margin: 50px auto;
+      |text-align: center;
+      |}
+      |#mainTitle{font-size:25px;}#allContent {width:50%;margin-left: auto;margin-right: auto;text-align: center;}
+  body
+    if (user)
+      p #{user.itendifier}
+    else
+      a(href='/auth/steam')
+        img(src='http://cdn.steamcommunity.com/public/images/signinthroughsteam/sits_large_border.png')
+    #allContent.row
+      br
+      h1(style='color: white;') CS Strategy Builder v1.0
+      .alert.alert-info
+        #mainTitle Choose a map
+        #mainContent
+          .form-group
+            form#make_room(method='post', action='/test')
+              select.form-control(name='map', form='make_room')
+                option(value='dust2') Dust 2
+                option(value='inferno') Inferno
+                option(value='dust') Dust
+                option(value='train') Train
+                option(value='nuke') Nuke
+                option(value='mirage') Mirage
+              br
+              button.btn.btn-success(type='submit')
+                | Plan
+                i.fam-lightning
+  footer
+    #allContent
+      .row.alert
+        .col-lg-6
+          br
+          .text-primary
+            | Developed by: evilduky666
+            br
+        .text-right.col-lg-6
+          a(href='http://www.w3.org/html/logo/')
+            img(src='http://www.w3.org/html/logo/badge/html5-badge-h-solo.png', width='63', height='64', alt='HTML5 Powered', title='HTML5 Powered')
+          a(rel='license', href='http://creativecommons.org/licenses/by/3.0/deed.en_US')
+            img(alt='Creative Commons License', style='border-width: 0;', src='http://i.creativecommons.org/l/by/3.0/88x31.png')
