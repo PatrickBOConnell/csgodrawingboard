@@ -513,4 +513,7 @@ $(document).ready(function(){
 		}
 		stage.draw();
 	}
+    showSave = function() {
+        $('#saveMenu').modal();
+    }
 });
