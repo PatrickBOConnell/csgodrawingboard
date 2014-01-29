@@ -20,7 +20,8 @@ var shapehash = {};
 
 
 $(document).ready(function(){
-	
+    var sessionstuff = '<%=Session["user"]%>'
+	console.log('session: ' + sessionstuff);
 	$('#pageLink').val(window.location.href);
 	
 	$("#pageLink").click(function(){
@@ -514,6 +515,10 @@ $(document).ready(function(){
 		stage.draw();
 	}
     showSave = function() {
-        $('#saveMenu').modal();
+        $('#blahblah-test').modal();
     }
+	submitSave = function() {
+		var name = $('#savetitle').val();
+		socket.emit('save attempt', {name: name});
+	}
 });

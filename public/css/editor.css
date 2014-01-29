@@ -78,6 +78,10 @@ canvas {
 	color: #666666;
 }
 
+#blahblah-test {
+    display: none;
+}
+
 .smoke {
 	height: 100px;
 	width: 100px;

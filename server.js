@@ -17,13 +17,21 @@ This file is part of CSGO Drawing Board.
 var express = require('express'),
 	app = express(),
 	server = require('http').createServer(app),
-	io = require('socket.io').listen(server),
+	iot = require('socket.io').listen(server),
 	path = require('path'),
+	connect = require('connect');
 	winston = require('winston'),
 	passport = require('passport'),
 	util = require('util'),
 	SteamStrategy = require('passport-steam').Strategy;
 	
+	
+var cookieParser = express.cookieParser('your secret sauce')
+  , sessionStore = new connect.middleware.session.MemoryStore();
+	
+var SessionSockets = require('session.socket.io'),
+io = new SessionSockets(iot, sessionStore, cookieParser);
+
 var db = require('mongojs').connect('localhost/csgodrawingboard', ['strats', 'logs']);
 require('winston-mongodb').MongoDB;
 
@@ -58,8 +66,8 @@ passport.use(new SteamStrategy({
 		process.nextTick(function() {
 		    //I guess this is where I put in the query for local user from steam data?
 			console.log('the identifier is: ' + identifier);
-			
-		    profile.itendifier = identifier;
+			var id = identifier.match('http://steamcommunity.com/openid/id/(.*)')[1];
+		    profile.identifier = id;
 			return done(null, profile);
 		});
 	}
@@ -80,10 +88,10 @@ var rooms_served = 0;
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'jade');
-app.use(express.cookieParser());
+app.use(cookieParser);
 app.use(express.bodyParser());
 app.use(express.methodOverride());
-app.use(express.session({secret: 'this is secret'}));
+app.use(express.session({store: sessionStore}));
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -205,7 +213,9 @@ function Room(name) {
 	}
 }
 
-io.on('connection', function(socket) {
+io.on('connection', function(err, socket, session) {
+    console.log('session info: '+session.passport.user.identifier);
+	socket.set('session', session, function(){});
 	socket.on('info', function(data){
 		try{
 			console.log('got here');
@@ -236,7 +246,7 @@ io.on('connection', function(socket) {
 			socket.emit('all players', rooms[data.room].players);
 			socket.emit('all shapes', rooms[data.room].getShapes());
 			socket.join(data.room);
-			io.sockets.in(data.room).emit('player change', {type: 'new', players: rooms[data.room].players, newPlayer: player});
+			iot.sockets.in(data.room).emit('player change', {type: 'new', players: rooms[data.room].players, newPlayer: player});
 			socket.set('room', {room: data.room, player: player}, function(){});
 			socket.broadcast.to(data.room).emit('new shape', rooms[data.room].shapes[locid]);
 		}
@@ -253,9 +263,9 @@ io.on('connection', function(socket) {
 				}
 				for(var i=0; i<room.player.drawings.length; i++) {
 					delete rooms[room.room].shapes[room.player.drawings[i]];
-					io.sockets.in(room.room).emit('remove shape', room.player.drawings[i]);
+					iot.sockets.in(room.room).emit('remove shape', room.player.drawings[i]);
 				}
-				io.sockets.in(room.room).emit('remove shape', room.player.imgid);
+				iot.sockets.in(room.room).emit('remove shape', room.player.imgid);
 				delete rooms[room.room].shapes[room.player.imgid];
 				rooms[room.room].colors.push(room.player.color);
 				var index = room.player.num;
@@ -268,11 +278,29 @@ io.on('connection', function(socket) {
 				for(var i=index; i<rooms[room.room].players.length; i++){
 					rooms[room.room].players[i].num--;
 				}
-				io.sockets.in(room.room).emit('player change', {type: 'disconnect', players: rooms[room.room].players, dcid: room.player.imgid});
+				iot.sockets.in(room.room).emit('player change', {type: 'disconnect', players: rooms[room.room].players, dcid: room.player.imgid});
 			});
 		}
 		catch(err) {
 			console.log('error in disconnect: ' + err);
+		}
+	});
+	socket.on('save attempt', function(data){
+		if(data === null || data === undefined) return;
+		try {
+		    socket.get('room', function(err, room){
+				var name = data.name;
+				socket.get('session', function(err2, sessionInfo){
+				   var steamID = sessionInfo.passport.user.identifier;
+				   var shapes = rooms[room.room].getShapes();
+				   db.strats.insert({stratName: name, steamID: steamID, shapeList: shapes}, function(err, doc){
+						console.log('new strat saved: '+doc[0].stratName+' : ' + doc[0]._id);
+				   });
+				});
+			});
+		}
+		catch (err) {
+		    console.log('oops');
 		}
 	});
 	socket.on('send stage', function(data){
@@ -307,7 +335,7 @@ io.on('connection', function(socket) {
 					rooms[room.room].players[room.player.num].drawings.push(locid);
 					console.log("drawings are: " + rooms[room.room].players[room.player.num].drawings);
 				}
-				io.sockets.in(room.room).emit('new shape', rooms[room.room].shapes[locid]);
+				iot.sockets.in(room.room).emit('new shape', rooms[room.room].shapes[locid]);
 			});
 		}
 		catch(err) {
@@ -338,7 +366,7 @@ io.on('connection', function(socket) {
 			socket.get('room', function(err, room) {
 				rooms[room.room].shapes[data].user = 'none';
 				rooms[room.room].shapesBeingUsed = false;
-				io.sockets.in(room.room).emit('not used', {shape: data, color: room.player.color});
+				iot.sockets.in(room.room).emit('not used', {shape: data, color: room.player.color});
 			});
 		}
 		catch(err) {
@@ -369,7 +397,7 @@ io.on('connection', function(socket) {
 			socket.get('room', function(err, room){
 				delete rooms[room.room].shapes[data];
 				rooms[room.room].players[room.player.num].drawings.splice(rooms[room.room].players[room.player.num].drawings.indexOf(data), 1);
-				io.sockets.in(room.room).emit('remove shape', data);
+				iot.sockets.in(room.room).emit('remove shape', data);
 			});
 		}
 		catch(err) {
@@ -407,8 +435,8 @@ io.on('connection', function(socket) {
 							rooms[room.room].players[room.player.num].name = data;
 							rooms[room.room].players[room.player.num].img = imgurl;
 							rooms[room.room].shapes[room.player.imgid].img = imgurl;
-							io.sockets.in(room.room).emit('player change', {type: 'change', players: rooms[room.room].players});
-							io.sockets.in(room.room).emit('shape move', {type: 'image change', img: imgurl, id: rooms[room.room].players[room.player.num].imgid});
+							iot.sockets.in(room.room).emit('player change', {type: 'change', players: rooms[room.room].players});
+							iot.sockets.in(room.room).emit('shape move', {type: 'image change', img: imgurl, id: rooms[room.room].players[room.player.num].imgid});
 						}
 					});
 				});

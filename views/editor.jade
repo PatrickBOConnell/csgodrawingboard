@@ -3,6 +3,7 @@ html
     head
         title CS strategy page
         link(type='text/css', rel='stylesheet', href='css/editor.css')
+        link(type='text/css', rel='stylesheet', href='css/basic.css')
         link(type='text/css', rel='stylesheet', href='css/ui-darkness/jquery-ui-1.10.3.custom.css')
         link(rel='icon', href='imgs/favicon.ico')
         script(src='/js/jquery.js')
@@ -28,4 +29,7 @@ html
         div#map(style="background-image: url('#{imgurl}')")
             div#playerListWrapper
                 div#playerList
-        div#saveMenu(syle="width: 100; height: 100")
+        div#blahblah-test
+            input#savetitle(type='text', name='savetitle', placeholder='Name of Strat')
+            button#confirm-save(onclick='submitSave()')
+                |Save
