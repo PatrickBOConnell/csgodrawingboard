@@ -293,6 +293,11 @@ io.on('connection', function(err, socket, session) {
 				socket.get('session', function(err2, sessionInfo){
 				   var steamID = sessionInfo.passport.user.identifier;
 				   var shapes = rooms[room.room].getShapes();
+				   //strongloop.com
+				   //mongoose
+				   //mongodb indexing
+				   //dex
+				   //npm init
 				   db.strats.insert({stratName: name, steamID: steamID, shapeList: shapes}, function(err, doc){
 						console.log('new strat saved: '+doc[0].stratName+' : ' + doc[0]._id);
 				   });
@@ -301,6 +306,21 @@ io.on('connection', function(err, socket, session) {
 		}
 		catch (err) {
 		    console.log('oops');
+		}
+	});
+	socket.on('open request', function(data){
+        if (data === null || data === undefined) return;
+		try {
+            socket.get('room', function(err, room){
+				socket.get('session', function(err2, sessionInfo){
+					var steamID = sessionInfo.passport.user.identifier;
+					db.strats.find({steamID: steamID}, function(err3, strats){
+						socket.emit('open confirm', strats);		
+				    });
+				});
+			});
+		} catch(e) {
+			console.log('oops' + e);
 		}
 	});
 	socket.on('send stage', function(data){
