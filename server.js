@@ -147,6 +147,11 @@ app.get('/room=:roomId', function(req, res) {
 		res.send('invalid room!');
 });
 
+app.get('/ajax/saveData', function(req, res){
+	var strats = db.find({steamID: 	req.user.identifier});
+	res.send(strats);
+});
+
 
 function getMap(map) {
 	switch(map) {

@@ -515,7 +515,7 @@ $(document).ready(function(){
 		stage.draw();
 	}
     showSave = function() {
-        $('#blahblah-test').modal();
+        $('#save-menu').modal();
     }
 	submitSave = function() {
 		var name = $('#savetitle').val();

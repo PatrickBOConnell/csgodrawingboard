@@ -29,7 +29,15 @@ html
         div#map(style="background-image: url('#{imgurl}')")
             div#playerListWrapper
                 div#playerList
-        div#blahblah-test
-            input#savetitle(type='text', name='savetitle', placeholder='Name of Strat')
-            button#confirm-save(onclick='submitSave()')
+        div#save-menu
+            span#save-title
+                Save Your Strat
+            select#saved-list(size="5")
+            input#save-input(type='text')
+            button#save-button(onclick='submitSave()')
                 |Save
+        div#open-menu
+            select#map-select
+            select#open-list(size="5")
+            button#delete-button(onclick='deleteStrat()')
+            button#open-button(onclick='openStrat()')
