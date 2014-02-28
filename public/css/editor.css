@@ -24,6 +24,35 @@ canvas {
 	word-wrap:break-word;
 }
 
+#navbar {
+    margin: 0;
+    padding: 0;
+}
+
+#navbar ul {
+    margin: 0;
+    padding: 0;
+}
+
+#navbar li {
+    list-style: none;
+    position: relative;
+}
+
+#navbar ul li a {
+    color: white;
+    text-align: center;
+    text-decoration: none;
+    width: 50px;
+    height: 30px;
+    display: block;
+}
+
+#navbar ul ul{
+    position: absolute;
+    display: none;
+}
+
 #toolbox {
 	background-color: gray;
 	height: 350;
@@ -42,8 +71,13 @@ canvas {
 	margin-right: auto;
 }
 
-#playerlist {
+#playerListWrapper {
 	margin-top: 40px;
+    width: 100px;
+    position: absolute;
+    vertical-align: middle;
+    left: -612px;
+    z-index: 100;
 }
 
 #map {
