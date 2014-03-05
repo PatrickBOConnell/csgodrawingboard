@@ -20,7 +20,10 @@ var shapehash = {};
 
 
 $(document).ready(function(){
-    var sessionstuff = '<%=Session["user"]%>'
+    $('#navbar ul li a').click(function(){
+		$('#navbar ul ul').toggle();
+    });
+    var sessionstuff = '<%=Session["user"]%>';
 	console.log('session: ' + sessionstuff);
 	$('#pageLink').val(window.location.href);
 	
