@@ -368,6 +368,9 @@ $(document).ready(function(){
 		alert('DISCONNECTED FROM SERVER');
 		if(socket) socket.disconnect();
 	});
+    socket.on('open confirm', function(data){
+        //CONSTRUCT THE OPEN LINKS 
+    });
 	function makeShape(data){
 		switch(data.type) {
 			case 'smoke':
