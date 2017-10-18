@@ -1,9 +1,3 @@
-update deprecated code
-
-get public dir working
-
-create config file with secret data and add to .gitignore
-
 seperate socket.io server into different file
 
 get room save to db on mlab working
