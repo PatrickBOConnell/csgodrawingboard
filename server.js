@@ -16,34 +16,22 @@ This file is part of CSGO Drawing Board.
 */
 var express = require('express'),
 	app = express(),
-	server = require('http').createServer(app),
-	iot = require('socket.io').listen(server),
 	path = require('path'),
-	connect = require('connect');
-	winston = require('winston'),
+	connect = require('connect'),
 	passport = require('passport'),
 	util = require('util'),
-	SteamStrategy = require('passport-steam').Strategy;
+	SteamStrategy = require('passport-steam').Strategy,
+	Session = require('express-session'),
+	LokiStore = require('connect-loki')(Session);
 	
 	
-var cookieParser = express.cookieParser('your secret sauce')
-  , sessionStore = new connect.middleware.session.MemoryStore();
-	
-var SessionSockets = require('session.socket.io'),
-io = new SessionSockets(iot, sessionStore, cookieParser);
+var fs = require('fs');
+var secret = fs.readFileSync('./secret.config', 'utf8');
 
-var db = require('mongojs').connect('localhost/csgodrawingboard', ['strats', 'logs']);
-require('winston-mongodb').MongoDB;
+console.log('secret: ' + secret);
 
-var options = {
-		db: 'csgodrawingboard',
-		collection: 'logs'
-};
 
-winston.add(winston.transports.MongoDB, options);
-	
-	
-//winston.add(winston.transports.File, {filename: ')
+var session = Session({store: new LokiStore({}), secret: secret, resave: true, saveUninitialized: true});
 	
 process.on('uncaughtException', function(err) {
 	console.log('uncaught exception: ' + err);
@@ -61,6 +49,7 @@ passport.deserializeUser(function(obj,done){
 passport.use(new SteamStrategy({
     returnURL: 'http://localhost:8080/auth/steam/return',//return url here
 	realm: 'http://localhost:8080/',
+	apiKey: '9DA2C6630018F45798A6AFC299468903'
     },
 	function(identifier, profile, done) {
 		process.nextTick(function() {
@@ -74,8 +63,7 @@ passport.use(new SteamStrategy({
 ));	
 
 
-var port = process.env.PORT || 8080;	
-server.listen(port);
+
 
 /* io.configure(function () { 
 	io.set("transports", ["xhr-polling"]); 
@@ -88,10 +76,9 @@ var rooms_served = 0;
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'jade');
-app.use(cookieParser);
 app.use(express.bodyParser());
 app.use(express.methodOverride());
-app.use(express.session({store: sessionStore}));
+app.use(session);
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -119,26 +106,26 @@ app.post('/test', function(req, res) {
 app.get('/', function(req, res) {
 	console.log('sent index');
 	indexes_served++;
-	winston.log('info', 'indexes served: %d', indexes_served);
 	res.render('index', {user: req.user});
 });
 app.get('/auth/steam',
     passport.authenticate('steam', {failureRedirect: '/'}),
     function(req, res) {
         res.redirect('/');
-});
+	}
+);
 
 app.get('/auth/steam/return',
     passport.authenticate('steam', {failureRedirect: '/'}),
     function(req, res) {
         res.redirect('/');
-});
+	}
+);
 
 app.get('/room=:roomId', function(req, res) {
 	var roomId = req.params.roomId;
 	console.log('room id is: ' + roomId);
 	rooms_served++;
-	winston.log('info', 'rooms served: %d', rooms_served);
 	if(rooms[roomId] !== undefined) {
 		var mapurl = getMap(rooms[roomId].map);
 		res.render('editor', {imgurl: mapurl, user:req.user});
@@ -153,10 +140,18 @@ app.get('/ajax/saveData', function(req, res){
 });
 
 
+var server = require('http').createServer(app);
+var port = process.env.PORT || 8080;	
+server.listen(port);
+
+var ios = require('socket.io-express-session');
+var io = require('socket.io').listen(server);
+io.use(ios(session));
+
 function getMap(map) {
 	switch(map) {
 		case 'dust2':
-			return 'imgs/de_dust2_radar_spectate.png';
+			return 'imgs/de_dust2_radar_spectate_default.png';
 			break;
 		case 'inferno':
 			return 'imgs/de_inferno_radar_spectate.png';
@@ -181,8 +176,6 @@ function getMap(map) {
 			break;
 	}
 }
-
-
 
 function Shape(id, type, x, y, points) {
 	this.id = id;
@@ -218,9 +211,18 @@ function Room(name) {
 	}
 }
 
-io.on('connection', function(err, socket, session) {
-    console.log('session info: '+session.passport.user.identifier);
-	socket.set('session', session, function(){});
+io.use(function(socket, next) {
+	console.log('doing middleware');
+	next();
+})
+
+io.on('connection', function(socket) {
+	console.log('in connection: ' + JSON.stringify(socket.socket));
+	var sessionInfo = socket.handshake.session;
+	console.log('sessionInfo: ' + JSON.stringify(sessionInfo));
+
+	socket.session = sessionInfo;
+
 	socket.on('info', function(data){
 		try{
 			console.log('got here');
@@ -232,6 +234,8 @@ io.on('connection', function(err, socket, session) {
 			//if(rooms[data.room] === undefined) rooms[data.room] = new Room(data.room);
 			var pnum = rooms[data.room].players.length;
 			var tmpname = 'player ' + pnum;
+
+			//MAKE THIS A LOCAL FILE!!
 			var player = new Player(tmpname, pnum, 'http://upload.wikimedia.org/wikipedia/en/a/af/Question_mark.png');
 			if(rooms[data.room].colors.length > 0)
 				player.color = rooms[data.room].colors.pop();
@@ -251,8 +255,10 @@ io.on('connection', function(err, socket, session) {
 			socket.emit('all players', rooms[data.room].players);
 			socket.emit('all shapes', rooms[data.room].getShapes());
 			socket.join(data.room);
-			iot.sockets.in(data.room).emit('player change', {type: 'new', players: rooms[data.room].players, newPlayer: player});
-			socket.set('room', {room: data.room, player: player}, function(){});
+			io.sockets.in(data.room).emit('player change', {type: 'new', players: rooms[data.room].players, newPlayer: player});
+			socket.room = {room: data.room, player: player};
+			console.log('changed socket? ' + socket.room);
+			//socket.set('room', {room: data.room, player: player}, function(){});
 			socket.broadcast.to(data.room).emit('new shape', rooms[data.room].shapes[locid]);
 		}
 		catch(err) {
@@ -261,30 +267,30 @@ io.on('connection', function(err, socket, session) {
 	});
 	socket.on('disconnect', function(data){
 		try{
-			socket.get('room', function(err, room) {
-				if(room === undefined || room === null) {
-					console.log('disconnecting bad request...');
-					return;
-				}
-				for(var i=0; i<room.player.drawings.length; i++) {
-					delete rooms[room.room].shapes[room.player.drawings[i]];
-					iot.sockets.in(room.room).emit('remove shape', room.player.drawings[i]);
-				}
-				iot.sockets.in(room.room).emit('remove shape', room.player.imgid);
-				delete rooms[room.room].shapes[room.player.imgid];
-				rooms[room.room].colors.push(room.player.color);
-				var index = room.player.num;
-				rooms[room.room].players.splice(index,1);
-				if(rooms[room.room].players.length < 1) {
-					console.log('deleteing room: ' + room.room);
-					delete rooms[room.room];
-					return;
-				}
-				for(var i=index; i<rooms[room.room].players.length; i++){
-					rooms[room.room].players[i].num--;
-				}
-				iot.sockets.in(room.room).emit('player change', {type: 'disconnect', players: rooms[room.room].players, dcid: room.player.imgid});
-			});
+			var room = socket.room;
+			
+			if(room === undefined || room === null) {
+				console.log('disconnecting bad request...');
+				return;
+			}
+			for(var i=0; i<room.player.drawings.length; i++) {
+				delete rooms[room.room].shapes[room.player.drawings[i]];
+				io.sockets.in(room.room).emit('remove shape', room.player.drawings[i]);
+			}
+			io.sockets.in(room.room).emit('remove shape', room.player.imgid);
+			delete rooms[room.room].shapes[room.player.imgid];
+			rooms[room.room].colors.push(room.player.color);
+			var index = room.player.num;
+			rooms[room.room].players.splice(index,1);
+			if(rooms[room.room].players.length < 1) {
+				console.log('deleteing room: ' + room.room);
+				delete rooms[room.room];
+				return;
+			}
+			for(var i=index; i<rooms[room.room].players.length; i++){
+				rooms[room.room].players[i].num--;
+			}
+			io.sockets.in(room.room).emit('player change', {type: 'disconnect', players: rooms[room.room].players, dcid: room.player.imgid});
 		}
 		catch(err) {
 			console.log('error in disconnect: ' + err);
@@ -293,21 +299,19 @@ io.on('connection', function(err, socket, session) {
 	socket.on('save attempt', function(data){
 		if(data === null || data === undefined) return;
 		try {
-		    socket.get('room', function(err, room){
-				var name = data.name;
-				socket.get('session', function(err2, sessionInfo){
-				   var steamID = sessionInfo.passport.user.identifier;
-				   var shapes = rooms[room.room].getShapes();
-				   //strongloop.com
-				   //mongoose
-				   //mongodb indexing
-				   //dex
-				   //npm init
-				   db.strats.insert({stratName: name, steamID: steamID, shapeList: shapes}, function(err, doc){
-						console.log('new strat saved: '+doc[0].stratName+' : ' + doc[0]._id);
-				   });
-				});
-			});
+			var room = socket.room;
+			var name = data.name;
+			var sessionInfo = socket.handshake.session;
+			var steamID = sessionInfo.passport.user.identifier;
+			var shapes = rooms[room.room].getShapes();
+		   //strongloop.com
+		   //mongoose
+		   //mongodb indexing
+		   //dex
+		   //npm init
+		   db.strats.insert({stratName: name, steamID: steamID, shapeList: shapes}, function(err, doc){
+				console.log('new strat saved: '+doc[0].stratName+' : ' + doc[0]._id);
+		   });
 		}
 		catch (err) {
 		    console.log('oops');
@@ -316,14 +320,12 @@ io.on('connection', function(err, socket, session) {
 	socket.on('open request', function(data){
         if (data === null || data === undefined) return;
 		try {
-            socket.get('room', function(err, room){
-				socket.get('session', function(err2, sessionInfo){
-					var steamID = sessionInfo.passport.user.identifier;
-					db.strats.find({steamID: steamID}, function(err3, strats){
-						socket.emit('open confirm', strats);		
-				    });
-				});
-			});
+			var room = socket.room;
+			var sessionInfo = socket.handshake.session;
+			var steamID = sessionInfo.passport.user.identifier;
+			db.strats.find({steamID: steamID}, function(err3, strats){
+				socket.emit('open confirm', strats);		
+		    });
 		} catch(e) {
 			console.log('oops' + e);
 		}
@@ -331,9 +333,8 @@ io.on('connection', function(err, socket, session) {
 	socket.on('send stage', function(data){
 		if(data === null || data === undefined) return;
 		try{
-		    socket.get('room', function(err, room){
-				rooms[room.room].stage = data;
-			});
+			var room = socket.room;
+			rooms[room.room].stage = data;	
 		}
 		catch(err){
 		    console.log('error in send stage: ' + err);
@@ -342,26 +343,26 @@ io.on('connection', function(err, socket, session) {
 	socket.on('draw', function(data){
 		if(data === null || data === undefined) return;
 		try{
-			socket.get('room', function(err, room) {
-				var i=0;
-				do {
-					var crypto = require('crypto')
-						, shasum = crypto.createHash('sha1');
-					if(room === null) return;
-					shasum.update(data.type + data.xPos + data.yPos + data.points + i);
-					var locid = shasum.digest('hex');
-					console.log(locid);
-					i++;
-				}
-				while(rooms[room.room].shapes[locid] !== undefined);
-				rooms[room.room].shapes[locid] = new Shape(locid, data.type, data.xPos, data.yPos, data.points);
-				rooms[room.room].shapes[locid].color = room.player.color;
-				if(data.type === 'brush'){ 
-					rooms[room.room].players[room.player.num].drawings.push(locid);
-					console.log("drawings are: " + rooms[room.room].players[room.player.num].drawings);
-				}
-				iot.sockets.in(room.room).emit('new shape', rooms[room.room].shapes[locid]);
-			});
+			console.log('in draw: ' + JSON.stringify(socket.room));
+			var room = socket.room;
+			var i=0;
+			do {
+				var crypto = require('crypto')
+					, shasum = crypto.createHash('sha1');
+				if(room === null) return;
+				shasum.update(data.type + data.xPos + data.yPos + data.points + i);
+				var locid = shasum.digest('hex');
+				console.log(locid);
+				i++;
+			}
+			while(rooms[room.room].shapes[locid] !== undefined);
+			rooms[room.room].shapes[locid] = new Shape(locid, data.type, data.xPos, data.yPos, data.points);
+			rooms[room.room].shapes[locid].color = room.player.color;
+			if(data.type === 'brush'){ 
+				rooms[room.room].players[room.player.num].drawings.push(locid);
+				console.log("drawings are: " + rooms[room.room].players[room.player.num].drawings);
+			}
+			io.sockets.in(room.room).emit('new shape', rooms[room.room].shapes[locid]);
 		}
 		catch(err) {
 			console.log('error in draw: ' + err);
@@ -370,16 +371,15 @@ io.on('connection', function(err, socket, session) {
 	socket.on('taking control', function(data) {
 		console.log('got into taking control');
 		try{
-			socket.get('room', function(err, room) {
-				if (data === null || data === undefined || rooms[room.room].shapes[data] === undefined) return;
-				console.log('data is: ' + data);
-				if(rooms[room.room].shapes[data].user === 'none' ||
-					rooms[room.room].shapes[data].user === socket) {
-						rooms[room.room].shapesBeingUsed = true;
-						rooms[room.room].shapes[data].user = socket;
-						socket.broadcast.to(room.room).emit('being used', data);
-				}
-			});
+			var room = socket.room;
+			if (data === null || data === undefined || rooms[room.room].shapes[data] === undefined) return;
+			console.log('data is: ' + data);
+			if(rooms[room.room].shapes[data].user === 'none' ||
+				rooms[room.room].shapes[data].user === socket) {
+					rooms[room.room].shapesBeingUsed = true;
+					rooms[room.room].shapes[data].user = socket;
+					socket.broadcast.to(room.room).emit('being used', data);
+			}
 		}
 		catch(err) {
 			console.log('error in taking control: ' + err);
@@ -388,11 +388,10 @@ io.on('connection', function(err, socket, session) {
 	socket.on('relinquish control', function(data) {
 		if(data === null || data === undefined) return;
 		try{
-			socket.get('room', function(err, room) {
-				rooms[room.room].shapes[data].user = 'none';
-				rooms[room.room].shapesBeingUsed = false;
-				iot.sockets.in(room.room).emit('not used', {shape: data, color: room.player.color});
-			});
+			var room = socket.room;
+			rooms[room.room].shapes[data].user = 'none';
+			rooms[room.room].shapesBeingUsed = false;
+			io.sockets.in(room.room).emit('not used', {shape: data, color: room.player.color});
 		}
 		catch(err) {
 			console.log('error in relinquish control: ' + err);
@@ -401,16 +400,15 @@ io.on('connection', function(err, socket, session) {
 	socket.on('move obj', function(data) {
 		if(data === null || data === undefined) return;
 		try{
-			socket.get('room', function(err, room) {
-				console.log('got into here');
-				if(rooms[room.room].shapes[data.id] === null || rooms[room.room].shapes[data.id] === undefined) return;
-				if(rooms[room.room].shapes[data.id].user === socket) {
-					console.log('also, correct user');
-					rooms[room.room].getShapes()[data.id].setX(data.xPos);
-					rooms[room.room].getShapes()[data.id].setY(data.yPos);
-					socket.broadcast.to(room.room).emit('shape move', {id: data.id, xPos: data.xPos, yPos: data.yPos});
-				}
-			});
+			var room = socket.room;
+			console.log('got into here');
+			if(rooms[room.room].shapes[data.id] === null || rooms[room.room].shapes[data.id] === undefined) return;
+			if(rooms[room.room].shapes[data.id].user === socket) {
+				console.log('also, correct user');
+				rooms[room.room].getShapes()[data.id].setX(data.xPos);
+				rooms[room.room].getShapes()[data.id].setY(data.yPos);
+				socket.broadcast.to(room.room).emit('shape move', {id: data.id, xPos: data.xPos, yPos: data.yPos});
+			}
 		}
 		catch(err) {
 			console.log('error in move obj: ' + err);
@@ -419,11 +417,10 @@ io.on('connection', function(err, socket, session) {
 	socket.on('remove elm', function(data) {
 		if(data === null || data === undefined) return;
 		try{
-			socket.get('room', function(err, room){
-				delete rooms[room.room].shapes[data];
-				rooms[room.room].players[room.player.num].drawings.splice(rooms[room.room].players[room.player.num].drawings.indexOf(data), 1);
-				iot.sockets.in(room.room).emit('remove shape', data);
-			});
+			var room = socket.room;
+			delete rooms[room.room].shapes[data];
+			rooms[room.room].players[room.player.num].drawings.splice(rooms[room.room].players[room.player.num].drawings.indexOf(data), 1);
+			io.sockets.in(room.room).emit('remove shape', data);
 		}
 		catch(err) {
 			console.log('error in remove elm: ' + err);
@@ -432,46 +429,45 @@ io.on('connection', function(err, socket, session) {
 	socket.on('steam info', function(data) {
 		console.log('got into steam info befoer html');
 		try {
-			socket.get('room', function(err, room) {
+			var room = socket.room;
 			var http = require('http');
-				var options = {
-					hostname: 'steamcommunity.com',
-					port: 80,
-					path: '/id/' + data,
-					method: 'GET'
-				};
-				var req = http.request(options, function(resp){
-					console.log('got into steam info during html');
-					var html = '';
-					resp.on('data', function(chunk) {
-						html += chunk;
-					});
-					resp.on('end', function(){
-						console.log('got into steam info after html');
-						var imgregex = new RegExp("img src=\"(.*\_full.jpg)");
-						var execs = imgregex.exec(html);
-						if(execs === null) {
-							console.log('bad login: ' + data);
-							socket.emit('bad login');
-							return;
-						}
-						else {
-							var imgurl = imgregex.exec(html)[1];
-							rooms[room.room].players[room.player.num].name = data;
-							rooms[room.room].players[room.player.num].img = imgurl;
-							rooms[room.room].shapes[room.player.imgid].img = imgurl;
-							iot.sockets.in(room.room).emit('player change', {type: 'change', players: rooms[room.room].players});
-							iot.sockets.in(room.room).emit('shape move', {type: 'image change', img: imgurl, id: rooms[room.room].players[room.player.num].imgid});
-						}
-					});
+			var options = {
+				hostname: 'steamcommunity.com',
+				port: 80,
+				path: '/id/' + data,
+				method: 'GET'
+			};
+			var req = http.request(options, function(resp){
+				console.log('got into steam info during html');
+				var html = '';
+				resp.on('data', function(chunk) {
+					html += chunk;
 				});
-				
-				req.on('error', function(e) {
-					console.log('error: ' + e.message);
+				resp.on('end', function(){
+					console.log('got into steam info after html');
+					var imgregex = new RegExp("img src=\"(.*\_full.jpg)");
+					var execs = imgregex.exec(html);
+					if(execs === null) {
+						console.log('bad login: ' + data);
+						socket.emit('bad login');
+						return;
+					}
+					else {
+						var imgurl = imgregex.exec(html)[1];
+						rooms[room.room].players[room.player.num].name = data;
+						rooms[room.room].players[room.player.num].img = imgurl;
+						rooms[room.room].shapes[room.player.imgid].img = imgurl;
+						io.sockets.in(room.room).emit('player change', {type: 'change', players: rooms[room.room].players});
+						io.sockets.in(room.room).emit('shape move', {type: 'image change', img: imgurl, id: rooms[room.room].players[room.player.num].imgid});
+					}
 				});
-				
-				req.end();
 			});
+			
+			req.on('error', function(e) {
+				console.log('error: ' + e.message);
+			});
+			
+			req.end();
 		}
 		catch(err) {
 			console.log('error in steam info: ' + err);
@@ -479,9 +475,8 @@ io.on('connection', function(err, socket, session) {
 	});
 	socket.on('request drawings', function(data) {
 		try{
-			socket.get('room', function(err, room) {
-				socket.emit('player drawings', room.player.drawings);
-			});
+			var room = socket.room;
+			socket.emit('player drawings', room.player.drawings);
 		}
 		catch(err) {
 			console.log('error in request drawings: ' + err);

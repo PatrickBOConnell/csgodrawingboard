@@ -33,7 +33,7 @@ $(document).ready(function(){
 	});
 	
 	var toolhidden = false;
-	var socket = io.connect(window.location.hostname, {reconnect: false});
+	var socket = io.connect({reconnect: false});
 	var URL = document.URL;
 	var roomregex = new RegExp("room=(.{40})");
 	var urlexec = roomregex.exec(URL);

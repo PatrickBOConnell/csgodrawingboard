@@ -1,0 +1,15 @@
+update deprecated code
+
+get public dir working
+
+create config file with secret data and add to .gitignore
+
+seperate socket.io server into different file
+
+get room save to db on mlab working
+
+find ways to clean up the code
+
+make front end look a bit prettier (better grafics, css, make colors for players random, etc)
+
+make all images local files
